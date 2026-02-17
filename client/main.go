@@ -104,6 +104,14 @@ func main() {
 	state := NewClientState()
 	state.stream = stream
 
+	// Pre-populate channels from config
+	for _, ch := range config.GetChannels() {
+		state.channels = append(state.channels, ch.GetName())
+	}
+	if len(state.channels) > 0 {
+		state.currentChannel = state.channels[0]
+	}
+
 	// Send subscription
 	if err := stream.Send(&pbService.StreamRequest{
 		Request: &pbService.StreamRequest_Subscribe{
@@ -113,6 +121,11 @@ func main() {
 		},
 	}); err != nil {
 		log.Fatalf("Failed to subscribe: %v", err)
+	}
+
+	fmt.Fprintf(state.out, "Connected to server. Joined channels: %v\r\n", state.channels)
+	if state.currentChannel != "" {
+		fmt.Fprintf(state.out, "Current channel: %s\r\n", state.currentChannel)
 	}
 
 	// Set raw mode
