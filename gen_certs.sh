@@ -6,7 +6,7 @@ mkdir -p certs
 cd certs
 
 # 1. Generate CA
-if [ ! -f ca.crt -a ! -f ca.key ] ; then
+if [ ! -f "ca.crt" -a ! -f "ca.key" ]; then
   echo "Generating CA..."
   openssl genrsa -out ca.key 4096
   openssl req -new -x509 -key ca.key -sha256 -subj '/C=US/ST=State/L=City/O=IRC-Bot-CA/CN=IRC-Bot-Root-CA' -days 3650 -out ca.crt
@@ -15,23 +15,27 @@ else
 fi
 
 # 2. Generate Server Cert
-if [ ! -f server.key && ! -f server.crt ]; then
+if [ ! -f "server.key" ] || [ ! -f "server.crt" ]; then
   echo 'Generating Server Cert...'
   openssl genrsa -out server.key 4096
   openssl req -new -key server.key -out server.csr -subj '/C=US/ST=State/L=City/O=IRC-Bot-Server/CN=localhost'
   # Sign Server Cert
-  openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out server.crt -days 365 -sha256 -extfile <$(printf 'subjectAltName=DNS:localhost,IP:127.0.0.1')
+  openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out server.crt -days 365 -sha256 
 else
   echo 'Server certs already exist.'
 fi
 
 # 3. Generate Client Cert
-CLIENT_CN='${1:-client_user}'
-echo 'Generating Client Cert for CN=${CLIENT_CN}...'
+if [ ! -f "client.key" ] || [ ! -f "client.crt" ]; then
+CLIENT_CN="${1:-client_user}"
+echo "Generating Client Cert for CN=${CLIENT_CN}..."
 openssl genrsa -out client.key 4096
-openssl req -new -key client.key -out client.csr -subj '/C=US/ST=State/L=City/O=IRC-Bot-Client/CN=${CLIENT_CN}'
+openssl req -new -key client.key -out client.csr -subj "/C=US/ST=State/L=City/O=IRC-Bot-Client/CN=${CLIENT_CN}"
 # Sign Client Cert
 openssl x509 -req -in client.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out client.crt -days 365 -sha256
+else
+  echo 'Client certs already exist.'
+fi
 
 echo 'Certificates generated in certs/'
 echo 'CA: ca.crt'
