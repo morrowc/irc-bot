@@ -24,18 +24,26 @@ var (
 	configPath = flag.String("config", "config.textproto", "Path to configuration file")
 )
 
-func main() {
-	flag.Parse()
-
+func loadConfig(path string) (*pbConfig.Config, error) {
 	// Load Configuration
-	configData, err := ioutil.ReadFile(*configPath)
+	configData, err := ioutil.ReadFile(path)
 	if err != nil {
-		log.Fatalf("Failed to read config file: %v", err)
+		return nil, fmt.Errorf("failed to read config file: %v", err)
 	}
 
 	config := &pbConfig.Config{}
 	if err := prototext.Unmarshal(configData, config); err != nil {
-		log.Fatalf("Failed to parse config file: %v", err)
+		return nil, fmt.Errorf("failed to parse config file: %v", err)
+	}
+	return config, nil
+}
+
+func main() {
+	flag.Parse()
+
+	config, err := loadConfig(*configPath)
+	if err != nil {
+		log.Fatal(err)
 	}
 
 	// Initialize History Buffers
