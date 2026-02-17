@@ -3,6 +3,9 @@ package main
 import (
 	"bufio"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -11,9 +14,11 @@ import (
 
 	"golang.org/x/term"
 
+	pbConfig "github.com/morrowc/irc-bot/proto/config"
 	pbService "github.com/morrowc/irc-bot/proto/service"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/protobuf/encoding/prototext"
 )
 
 // Global state
@@ -28,13 +33,47 @@ var (
 
 func main() {
 	// Connect to gRPC
-	// TODO: Load config/flags for address/cert
-	creds, err := credentials.NewClientTLSFromFile("cert.pem", "")
-	// For testing, maybe insecure if cert not ready, but req says TLS.
-	// Let's assume insecure for local dev if needed, but code for TLS.
+	configPath := flag.String("config", "config.textproto", "Path to configuration file")
+	flag.Parse()
+
+	configFile, err := os.ReadFile(*configPath)
 	if err != nil {
-		log.Fatalf("Failed to load TLS creds: %v", err)
+		log.Fatalf("failed to read config file: %v", err)
 	}
+
+	config := &pbConfig.Config{}
+	if err := prototext.Unmarshal(configFile, config); err != nil {
+		log.Fatalf("failed to parse config file: %v", err)
+	}
+
+	tlsConfig := config.GetTls()
+	if tlsConfig == nil {
+		log.Fatal("TLS config missing in configuration file")
+	}
+
+	// Load CA
+	caCert, err := os.ReadFile(tlsConfig.GetCaFile())
+	if err != nil {
+		log.Fatalf("failed to read CA cert: %v", err)
+	}
+	caCertPool := x509.NewCertPool()
+	if !caCertPool.AppendCertsFromPEM(caCert) {
+		log.Fatalf("failed to append CA cert")
+	}
+
+	// Load Client Cert/Key
+	clientCert, err := tls.LoadX509KeyPair(tlsConfig.GetClientCertFile(), tlsConfig.GetClientKeyFile())
+	if err != nil {
+		log.Fatalf("failed to load client keypair: %v", err)
+	}
+
+	// Create TLS Config
+	tConf := &tls.Config{
+		RootCAs:      caCertPool,
+		Certificates: []tls.Certificate{clientCert},
+		ServerName:   "localhost", // Match server cert CN
+	}
+	creds := credentials.NewTLS(tConf)
 
 	conn, err := grpc.NewClient("localhost:50051", grpc.WithTransportCredentials(creds))
 	if err != nil {

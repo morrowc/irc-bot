@@ -19,10 +19,20 @@ message Channel {
   int32 history_limit = 3; // Number of messages to keep in history
 }
 
+message TLS {
+  string ca_file = 1;
+  string cert_file = 2; // Server cert
+  string key_file = 3;  // Server key
+  string client_cn = 4; // Expected CN for client (server-side check)
+  string client_cert_file = 5; // Client cert
+  string client_key_file = 6;  // Client key
+}
+
 message Service {
   int32 port = 1;
-  string cert_file = 2;
-  string key_file = 3;
+  // Deprecated: use global tls config
+  string cert_file = 2; 
+  string key_file = 3; 
   string client_passkey = 4; // Simple auth for now
 }
 
@@ -30,4 +40,5 @@ message Config {
   IRCServer irc = 1;
   repeated Channel channels = 2;
   Service service = 3;
+  TLS tls = 4;
 }
