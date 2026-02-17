@@ -21,9 +21,10 @@ message StreamRequest {
   // Initial implementation might just be a "Subscribe" message.
   oneof request {
       SubscribeRequest subscribe = 1;
-      // Potential future control messages (e.g. valid-user-check)
+      SendMessageRequest send_message = 2;
   }
 }
+
 
 message SubscribeRequest {
     // If true, server sends history based on server-side logic (e.g. since last disconnect or full buffer).

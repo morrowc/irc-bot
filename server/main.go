@@ -60,10 +60,9 @@ func main() {
 	getBuffer := func(name string) *history.ChannelBuffer {
 		return histBuffers[name]
 	}
-
 	// Initialize gRPC Service
 	grpcService := NewIRCServiceServer(config.GetService(), histBuffers)
-
+	
 	// Helper to broadcast to gRPC clients
 	broadcaster := func(msg *pbService.IRCMessage) {
 		grpcService.Broadcast(msg)
@@ -71,6 +70,9 @@ func main() {
 
 	// Start IRC Client
 	bot := NewIRCBot(config.GetIrc(), config.GetChannels(), getBuffer, broadcaster)
+
+    // Link bot to service
+	grpcService.SetBot(bot)
 
 	go func() {
 		if err := bot.Connect(); err != nil {

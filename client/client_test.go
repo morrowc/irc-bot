@@ -13,6 +13,8 @@ func TestHandleMessage(t *testing.T) {
 	out := new(bytes.Buffer)
 	cs := NewClientState()
 	cs.out = out
+	cs.width = 80
+	cs.height = 24
 
 	msg := &pbService.IRCMessage{
 		Channel:   "#test",
@@ -43,6 +45,8 @@ func TestChannelSwitching(t *testing.T) {
 	out := new(bytes.Buffer)
 	cs := NewClientState()
 	cs.out = out
+	cs.width = 80
+	cs.height = 24
 
 	// Add messages for two channels
 	cs.handleMessage(&pbService.IRCMessage{Channel: "#chan1", Content: "msg1", Timestamp: timestamppb.Now()})
@@ -80,6 +84,8 @@ func TestHandleInput(t *testing.T) {
 	out := new(bytes.Buffer)
 	cs := NewClientState()
 	cs.out = out
+	cs.width = 80
+	cs.height = 24
 	cs.channels = []string{"#chan1", "#chan2"}
 	cs.currentChannel = "#chan1"
 
@@ -89,8 +95,8 @@ func TestHandleInput(t *testing.T) {
 		exitCalled = true
 	}
 
-	// Simulate input: Next Channel (Ctrl-N=14), 'a', Ctrl-D (4)
-	input := []byte{14, 'a', 4}
+	// Simulate input: Next Channel (Ctrl-N=14), 'a', Backspace (127), 'b', Enter (10), Ctrl-D (4)
+	input := []byte{14, 'a', 127, 'b', 10, 4}
 	r := bytes.NewReader(input)
 
 	cs.handleInput(r)
@@ -108,7 +114,7 @@ func TestHandleInput(t *testing.T) {
 	if !strings.Contains(out.String(), "Switched to #chan2") {
 		t.Error("Expected redraw output")
 	}
-	if !strings.Contains(out.String(), "a") {
-		t.Error("Expected echoed character 'a'")
+	if !strings.Contains(out.String(), "b") {
+		t.Error("Expected echoed character 'b'")
 	}
 }

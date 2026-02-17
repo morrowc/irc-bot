@@ -19,6 +19,7 @@ type IRCServiceServer struct {
 	history map[string]*history.ChannelBuffer
 	// Active streams
 	streams sync.Map // map[pbService.IRCService_StreamMessagesServer]bool
+	bot     *IRCBot
 	mu      sync.RWMutex
 }
 
@@ -27,6 +28,12 @@ func NewIRCServiceServer(cfg *pbConfig.Service, hist map[string]*history.Channel
 		config:  cfg,
 		history: hist,
 	}
+}
+
+func (s *IRCServiceServer) SetBot(bot *IRCBot) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.bot = bot
 }
 
 func (s *IRCServiceServer) StreamMessages(stream pbService.IRCService_StreamMessagesServer) error {
@@ -78,11 +85,17 @@ func (s *IRCServiceServer) StreamMessages(stream pbService.IRCService_StreamMess
 		s.mu.Unlock()
 	}()
 
-	// Keep stream alive and handle incoming control messages (if any)
+	// Keep stream alive and handle incoming control messages
 	for {
-		_, err := stream.Recv()
+		req, err := stream.Recv()
 		if err != nil {
 			return err
+		}
+
+		if msgReq, ok := req.Request.(*pbService.StreamRequest_SendMessage); ok {
+			if s.bot != nil {
+				s.bot.Send(msgReq.SendMessage.GetChannel(), msgReq.SendMessage.GetMessage())
+			}
 		}
 	}
 }

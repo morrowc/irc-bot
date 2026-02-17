@@ -31,6 +31,10 @@ type ClientState struct {
 	stream         pbService.IRCService_StreamMessagesClient
 	out            io.Writer // For testing output
 	exitFunc       func(int) // For testing exit
+
+	// UI State
+	width, height int
+	inputBuffer   []rune
 }
 
 func NewClientState() *ClientState {
@@ -123,11 +127,6 @@ func main() {
 		log.Fatalf("Failed to subscribe: %v", err)
 	}
 
-	fmt.Fprintf(state.out, "Connected to server. Joined channels: %v\r\n", state.channels)
-	if state.currentChannel != "" {
-		fmt.Fprintf(state.out, "Current channel: %s\r\n", state.currentChannel)
-	}
-
 	// Set raw mode
 	oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
 	if err != nil {
@@ -135,6 +134,10 @@ func main() {
 	}
 	state.termState = oldState
 	defer term.Restore(int(os.Stdin.Fd()), oldState)
+
+	// Initial draw
+	state.updateSize()
+	state.redraw()
 
 	// Handle Input
 	go state.handleInput(os.Stdin)
@@ -160,30 +163,77 @@ func main() {
 
 func (cs *ClientState) handleInput(input io.Reader) {
 	reader := bufio.NewReader(input)
+
 	for {
-		// Read byte by byte for control codes
-		b, err := reader.ReadByte()
+		// Read rune (support unicode)
+		r, _, err := reader.ReadRune()
 		if err != nil {
 			return
 		}
 
-		switch b {
+		cs.mu.Lock()
+
+		switch r {
 		case 3: // Ctrl-C
+			cs.mu.Unlock()
 			if cs.termState != nil {
 				term.Restore(int(os.Stdin.Fd()), cs.termState)
 			}
 			cs.exitFunc(0)
+			return
 		case 4: // Ctrl-D
+			cs.mu.Unlock()
 			if cs.termState != nil {
 				term.Restore(int(os.Stdin.Fd()), cs.termState)
 			}
 			cs.exitFunc(0)
+			return
 		case 14: // Ctrl-N (Next Channel)
+			cs.mu.Unlock()
 			cs.nextChannel()
 		case 16: // Ctrl-P (Prev Channel)
+			cs.mu.Unlock()
 			cs.prevChannel()
+		case 13, 10: // Enter (\r or \n)
+			if len(cs.inputBuffer) > 0 {
+				msg := string(cs.inputBuffer)
+				cs.inputBuffer = nil
+
+				// Clear input line
+				cs.moveToInput()
+
+				// Send to Server
+				if cs.stream != nil {
+					// Start goroutine to send to avoid blocking input loop
+					go func(ch, txt string) {
+						err := cs.stream.Send(&pbService.StreamRequest{
+							Request: &pbService.StreamRequest_SendMessage{
+								SendMessage: &pbService.SendMessageRequest{
+									Channel: ch,
+									Message: txt,
+								},
+							},
+						})
+						if err != nil {
+							// Log error?
+						}
+					}(cs.currentChannel, msg)
+				}
+			}
+			cs.mu.Unlock()
+		case 127, 8: // Backspace
+			if len(cs.inputBuffer) > 0 {
+				cs.inputBuffer = cs.inputBuffer[:len(cs.inputBuffer)-1]
+				cs.moveToInput()
+			}
+			cs.mu.Unlock()
 		default:
-			fmt.Fprint(cs.out, string(b))
+			// Filter control chars
+			if r >= 32 {
+				cs.inputBuffer = append(cs.inputBuffer, r)
+				cs.moveToInput()
+			}
+			cs.mu.Unlock()
 		}
 	}
 }
@@ -211,7 +261,20 @@ func (cs *ClientState) handleMessage(msg *pbService.IRCMessage) {
 	}
 
 	if ch == cs.currentChannel {
+		// Save Cursor
+		fmt.Fprint(cs.out, "\0337")
+
+		// Move to bottom of scroll region
+		fmt.Fprintf(cs.out, "\033[%d;1H", cs.height-2)
 		fmt.Fprintf(cs.out, "\r\n[%s] <%s> %s", msg.GetTimestamp().AsTime().Format("15:04"), msg.GetSender(), msg.GetContent())
+
+		// Restore Cursor
+		fmt.Fprint(cs.out, "\0338")
+		// Or just force redraw input?
+		// If we printed \n at bottom of scroll region, it scrolled up.
+		// Status bar and Input line should be unaffected if outside scroll region.
+		// But let's be safe and redraw status if needed?
+		// Actually simple appending might work if scroll region is set correctly.
 	}
 }
 
@@ -253,13 +316,68 @@ func (cs *ClientState) prevChannel() {
 	}
 }
 
-func (cs *ClientState) redraw() {
-	// Clear screen and redraw history of current channel
-	fmt.Fprint(cs.out, "\033[H\033[2J") // ANSI clear
-	fmt.Fprintf(cs.out, "Switched to %s\r\n", cs.currentChannel)
+func (cs *ClientState) updateSize() {
+	w, h, err := term.GetSize(int(os.Stdin.Fd()))
+	if err != nil {
+		// Fallback?
+		return
+	}
+	cs.width = w
+	cs.height = h
+	cs.setScrollRegion(1, h-2)
+}
 
+func (cs *ClientState) setScrollRegion(top, bot int) {
+	fmt.Fprintf(cs.out, "\033[%d;%dr", top, bot)
+}
+
+func (cs *ClientState) drawStatusBar() {
+	// Move to Status Line (height-1)
+	fmt.Fprintf(cs.out, "\033[%d;1H", cs.height-1) // Move cursor
+	fmt.Fprintf(cs.out, "\033[7m")                 // Invert colors
+
+	status := fmt.Sprintf("[ Channel: %s ]", cs.currentChannel)
+	// Pad with spaces to width
+	for len(status) < cs.width {
+		status += " "
+	}
+	fmt.Fprint(cs.out, status)
+	fmt.Fprintf(cs.out, "\033[0m") // Reset colors
+}
+
+func (cs *ClientState) moveToInput() {
+	fmt.Fprintf(cs.out, "\033[%d;1H", cs.height)
+	// Reprint buffer
+	fmt.Fprint(cs.out, "\033[2K") // Clear line
+	fmt.Fprintf(cs.out, "> %s", string(cs.inputBuffer))
+}
+
+func (cs *ClientState) redraw() {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+
+	// Clear screen
+	fmt.Fprint(cs.out, "\033[H\033[2J")
+
+	cs.updateSize() // Ensure size is current
+	cs.drawStatusBar()
+
+	// Draw correct number of past messages in the scroll region
+	// The scroll region is 1 to height-2
+	// We should print the last (height-2) messages
 	msgs := cs.msgHistory[cs.currentChannel]
-	for _, msg := range msgs {
+	maxMsgs := cs.height - 2
+	start := 0
+	if len(msgs) > maxMsgs {
+		start = len(msgs) - maxMsgs
+	}
+
+	// Move to top
+	fmt.Fprint(cs.out, "\033[1;1H")
+	for i := start; i < len(msgs); i++ {
+		msg := msgs[i]
 		fmt.Fprintf(cs.out, "[%s] <%s> %s\r\n", msg.GetTimestamp().AsTime().Format("15:04"), msg.GetSender(), msg.GetContent())
 	}
+
+	cs.moveToInput()
 }

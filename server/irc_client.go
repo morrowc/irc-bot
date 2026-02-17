@@ -58,6 +58,26 @@ func (b *IRCBot) Join(channel, key string) {
 	b.client.Cmd.JoinKey(channel, key)
 }
 
+func (b *IRCBot) Send(channel, message string) {
+	b.client.Cmd.Message(channel, message)
+
+	// Echo back to history/clients so the sender sees it too
+	msg := &pbService.IRCMessage{
+		Timestamp: timestamppb.Now(),
+		Channel:   channel,
+		Sender:    b.client.GetNick(),
+		Content:   message,
+	}
+
+	// Store in history
+	if buf := b.history(channel); buf != nil {
+		buf.Add(msg)
+	}
+
+	// Broadcast to gRPC clients
+	b.broadcast(msg)
+}
+
 func (b *IRCBot) handlePrivMsg(c *girc.Client, e girc.Event) {
 	channel := e.Params[0]
 	content := e.Last()
