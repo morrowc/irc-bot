@@ -1,208 +1,210 @@
 package main
 
 import (
-    "bufio"
-    "context"
-    "fmt"
-    "io"
-    "log"
-    "os"
-    "strings"
-    "sync"
-    "time"
+	"bufio"
+	"context"
+	"fmt"
+	"io"
+	"log"
+	"os"
+	"sync"
 
-    "golang.org/x/term"
+	"golang.org/x/term"
 
-    pbService "github.com/morrowc/irc-bot/proto/service"
-    "google.golang.org/grpc"
-    "google.golang.org/grpc/credentials"
+	pbService "github.com/morrowc/irc-bot/proto/service"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 // Global state
 var (
-    currentChannel string
-    channels       []string
-    msgHistory     = make(map[string][]*pbService.IRCMessage)
-    mu             sync.RWMutex
-    termState      *term.State
-    stream         pbService.IRCService_StreamMessagesClient
+	currentChannel string
+	channels       []string
+	msgHistory     = make(map[string][]*pbService.IRCMessage)
+	mu             sync.RWMutex
+	termState      *term.State
+	stream         pbService.IRCService_StreamMessagesClient
 )
 
 func main() {
-    // Connect to gRPC
-    // TODO: Load config/flags for address/cert
-    creds, err := credentials.NewClientTLSFromFile("cert.pem", "") 
-    // For testing, maybe insecure if cert not ready, but req says TLS.
-    // Let's assume insecure for local dev if needed, but code for TLS.
-    if err != nil {
-        log.Fatalf("Failed to load TLS creds: %v", err)
-    }
-    
-    conn, err := grpc.NewClient("localhost:50051", grpc.WithTransportCredentials(creds))
-    if err != nil {
-        log.Fatalf("did not connect: %v", err)
-    }
-    defer conn.Close()
-    
-    client := pbService.NewIRCServiceClient(conn)
-    
-    // Subscribe
-    ctx := context.Background()
-    stream, err = client.StreamMessages(ctx)
-    if err != nil {
-        log.Fatalf("Error creating stream: %v", err)
-    }
-    
-    // Send subscription
-    if err := stream.Send(&pbService.StreamRequest{
-        Request: &pbService.StreamRequest_Subscribe{
-            Subscribe: &pbService.SubscribeRequest{
-                GetHistory: true, // Request history
-            },
-        },
-    }); err != nil {
-        log.Fatalf("Failed to subscribe: %v", err)
-    }
+	// Connect to gRPC
+	// TODO: Load config/flags for address/cert
+	creds, err := credentials.NewClientTLSFromFile("cert.pem", "")
+	// For testing, maybe insecure if cert not ready, but req says TLS.
+	// Let's assume insecure for local dev if needed, but code for TLS.
+	if err != nil {
+		log.Fatalf("Failed to load TLS creds: %v", err)
+	}
 
-    // Set raw mode
-    oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
-    if err != nil {
-        log.Fatalf("Failed to set raw mode: %v", err)
-    }
-    termState = oldState
-    defer term.Restore(int(os.Stdin.Fd()), oldState)
+	conn, err := grpc.NewClient("localhost:50051", grpc.WithTransportCredentials(creds))
+	if err != nil {
+		log.Fatalf("did not connect: %v", err)
+	}
+	defer conn.Close()
 
-    // Handle Input
-    go handleInput()
-    
-    // Handle Output/Stream
-    for {
-        in, err := stream.Recv()
-        if err == io.EOF {
-            break
-        }
-        if err != nil {
-            log.Fatalf("Failed to receive: %v", err)
-        }
-        
-        switch e := in.Event.(type) {
-        case *pbService.StreamEvent_Message:
-            handleMessage(e.Message)
-        case *pbService.StreamEvent_SystemMessage:
-            handleSystemMessage(e.SystemMessage)
-        }
-    }
+	client := pbService.NewIRCServiceClient(conn)
+
+	// Subscribe
+	ctx := context.Background()
+	stream, err = client.StreamMessages(ctx)
+	if err != nil {
+		log.Fatalf("Error creating stream: %v", err)
+	}
+
+	// Send subscription
+	if err := stream.Send(&pbService.StreamRequest{
+		Request: &pbService.StreamRequest_Subscribe{
+			Subscribe: &pbService.SubscribeRequest{
+				GetHistory: true, // Request history
+			},
+		},
+	}); err != nil {
+		log.Fatalf("Failed to subscribe: %v", err)
+	}
+
+	// Set raw mode
+	oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
+	if err != nil {
+		log.Fatalf("Failed to set raw mode: %v", err)
+	}
+	termState = oldState
+	defer term.Restore(int(os.Stdin.Fd()), oldState)
+
+	// Handle Input
+	go handleInput()
+
+	// Handle Output/Stream
+	for {
+		in, err := stream.Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			log.Fatalf("Failed to receive: %v", err)
+		}
+
+		switch e := in.Event.(type) {
+		case *pbService.StreamEvent_Message:
+			handleMessage(e.Message)
+		case *pbService.StreamEvent_SystemMessage:
+			handleSystemMessage(e.SystemMessage)
+		}
+	}
 }
 
 func handleInput() {
-    reader := bufio.NewReader(os.Stdin)
-    for {
-        // Read byte by byte for control codes
-        b, err := reader.ReadByte()
-        if err != nil {
-            return
-        }
+	reader := bufio.NewReader(os.Stdin)
+	for {
+		// Read byte by byte for control codes
+		b, err := reader.ReadByte()
+		if err != nil {
+			return
+		}
 
-        switch b {
-        case 3: // Ctrl-C
-            // cleanup handled by defer in main? No, os.Exit wont run defers.
-            // But signals will be caught if handled.
-            // Raw mode interprets Ctrl-C as 3.
-            term.Restore(int(os.Stdin.Fd()), termState)
-            os.Exit(0)
-        case 4: // Ctrl-D
-            // Disconnect/Quit
-            term.Restore(int(os.Stdin.Fd()), termState)
-            os.Exit(0)
-        case 14: // Ctrl-N (Next Channel)
-            nextChannel()
-        case 16: // Ctrl-P (Prev Channel)
-            prevChannel()
-        default:
-            // Handle typing for sending messages (optional, not strictly in reqs but implied "client")
-            // Req says "client should manage the terminal and accept simple control-character combinations... connect/disconnect... switch channels"
-            // It doesn't explicitly say "send messages", but it's an IRC client.
-            // "The example client should manage the terminal and accept simple control-character combinations to switch between channels... and a configurable command to disconnect"
-            // It mentions "remote-client is connected messages for all connected channels should be transmitted...".
-            // It doesn't explicitly mention sending.
-            // I'll skip sending implementation for now to keep it simple, or just echo characters.
-            // Printing characters in raw mode is manual.
-            fmt.Print(string(b))
-        }
-    }
+		switch b {
+		case 3: // Ctrl-C
+			// cleanup handled by defer in main? No, os.Exit wont run defers.
+			// But signals will be caught if handled.
+			// Raw mode interprets Ctrl-C as 3.
+			term.Restore(int(os.Stdin.Fd()), termState)
+			os.Exit(0)
+		case 4: // Ctrl-D
+			// Disconnect/Quit
+			term.Restore(int(os.Stdin.Fd()), termState)
+			os.Exit(0)
+		case 14: // Ctrl-N (Next Channel)
+			nextChannel()
+		case 16: // Ctrl-P (Prev Channel)
+			prevChannel()
+		default:
+			// Handle typing for sending messages (optional, not strictly in reqs but implied "client")
+			// Req says "client should manage the terminal and accept simple control-character combinations... connect/disconnect... switch channels"
+			// It doesn't explicitly say "send messages", but it's an IRC client.
+			// "The example client should manage the terminal and accept simple control-character combinations to switch between channels... and a configurable command to disconnect"
+			// It mentions "remote-client is connected messages for all connected channels should be transmitted...".
+			// It doesn't explicitly mention sending.
+			// I'll skip sending implementation for now to keep it simple, or just echo characters.
+			// Printing characters in raw mode is manual.
+			fmt.Print(string(b))
+		}
+	}
 }
 
 func handleMessage(msg *pbService.IRCMessage) {
-    mu.Lock()
-    defer mu.Unlock()
-    
-    ch := msg.GetChannel()
-    msgHistory[ch] = append(msgHistory[ch], msg)
-    
-    // Add to channel list if new
-    found := false
-    for _, c := range channels {
-        if c == ch {
-            found = true
-            break
-        }
-    }
-    if !found {
-        channels = append(channels, ch)
-        if currentChannel == "" {
-            currentChannel = ch
-        }
-    }
-    
-    if ch == currentChannel {
-        // Print message
-        // Needs proper cursor management in raw mode
-        // \r\n for newline
-        fmt.Printf("\r\n[%s] <%s> %s", msg.GetTimestamp().AsTime().Format("15:04"), msg.GetSender(), msg.GetContent())
-    }
+	mu.Lock()
+	defer mu.Unlock()
+
+	ch := msg.GetChannel()
+	msgHistory[ch] = append(msgHistory[ch], msg)
+
+	// Add to channel list if new
+	found := false
+	for _, c := range channels {
+		if c == ch {
+			found = true
+			break
+		}
+	}
+	if !found {
+		channels = append(channels, ch)
+		if currentChannel == "" {
+			currentChannel = ch
+		}
+	}
+
+	if ch == currentChannel {
+		// Print message
+		// Needs proper cursor management in raw mode
+		// \r\n for newline
+		fmt.Printf("\r\n[%s] <%s> %s", msg.GetTimestamp().AsTime().Format("15:04"), msg.GetSender(), msg.GetContent())
+	}
 }
 
 func handleSystemMessage(msg *pbService.SystemMessage) {
-    fmt.Printf("\r\n[SYSTEM] %s", msg.GetContent())
+	fmt.Printf("\r\n[SYSTEM] %s", msg.GetContent())
 }
 
 func nextChannel() {
-    mu.Lock()
-    defer mu.Unlock()
-    if len(channels) == 0 { return }
-    
-    for i, ch := range channels {
-        if ch == currentChannel {
-            next := (i + 1) % len(channels)
-            currentChannel = channels[next]
-            redraw()
-            return
-        }
-    }
+	mu.Lock()
+	defer mu.Unlock()
+	if len(channels) == 0 {
+		return
+	}
+
+	for i, ch := range channels {
+		if ch == currentChannel {
+			next := (i + 1) % len(channels)
+			currentChannel = channels[next]
+			redraw()
+			return
+		}
+	}
 }
 
 func prevChannel() {
-    mu.Lock()
-    defer mu.Unlock()
-    if len(channels) == 0 { return }
-    
-    for i, ch := range channels {
-        if ch == currentChannel {
-            prev := (i - 1 + len(channels)) % len(channels)
-            currentChannel = channels[prev]
-            redraw()
-            return
-        }
-    }
+	mu.Lock()
+	defer mu.Unlock()
+	if len(channels) == 0 {
+		return
+	}
+
+	for i, ch := range channels {
+		if ch == currentChannel {
+			prev := (i - 1 + len(channels)) % len(channels)
+			currentChannel = channels[prev]
+			redraw()
+			return
+		}
+	}
 }
 
 func redraw() {
-    // Clear screen and redraw history of current channel
-    fmt.Print("\033[H\033[2J") // ANSI clear
-    fmt.Printf("Switched to %s\r\n", currentChannel)
-    
-    msgs := msgHistory[currentChannel]
-    for _, msg := range msgs {
-         fmt.Printf("[%s] <%s> %s\r\n", msg.GetTimestamp().AsTime().Format("15:04"), msg.GetSender(), msg.GetContent())
-    }
+	// Clear screen and redraw history of current channel
+	fmt.Print("\033[H\033[2J") // ANSI clear
+	fmt.Printf("Switched to %s\r\n", currentChannel)
+
+	msgs := msgHistory[currentChannel]
+	for _, msg := range msgs {
+		fmt.Printf("[%s] <%s> %s\r\n", msg.GetTimestamp().AsTime().Format("15:04"), msg.GetSender(), msg.GetContent())
+	}
 }

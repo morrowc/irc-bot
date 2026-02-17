@@ -5,7 +5,6 @@ import (
 	"time"
 
 	pb "github.com/morrowc/irc-bot/proto/service"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // ChannelBuffer manages history for a single channel.
