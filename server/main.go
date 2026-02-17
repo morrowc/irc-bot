@@ -85,7 +85,7 @@ func main() {
 	// Let's rely on the bot to handle rejoins if possible, or adds a handler for 001.
 
 	// Start gRPC Server
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", config.GetService().GetPort()))
+	lis, err := net.Listen("tcp", fmt.Sprintf("%s:%d", config.GetService().GetHost(), config.GetService().GetPort()))
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
