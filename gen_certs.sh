@@ -20,7 +20,7 @@ if [ ! -f "server.key" ] || [ ! -f "server.crt" ]; then
   openssl genrsa -out server.key 4096
   openssl req -new -key server.key -out server.csr -subj '/C=US/ST=State/L=City/O=IRC-Bot-Server/CN=localhost'
   # Sign Server Cert
-  openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out server.crt -days 365 -sha256 
+  openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out server.crt -days 365 -sha256 -extfile ../server.cnf
 else
   echo 'Server certs already exist.'
 fi
