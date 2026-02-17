@@ -35,6 +35,7 @@ message Service {
   string key_file = 3; 
   string client_passkey = 4; // Simple auth for now
   string host = 5;
+  string shutdown_password = 6;
 }
 
 message Config {

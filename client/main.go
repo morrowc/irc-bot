@@ -10,7 +10,9 @@ import (
 	"io"
 	"log"
 	"os"
+	"strings"
 	"sync"
+	"time"
 
 	"golang.org/x/term"
 
@@ -194,7 +196,6 @@ func (cs *ClientState) handleInput(input io.Reader) {
 		case 16: // Ctrl-P (Prev Channel)
 			cs.mu.Unlock()
 			cs.prevChannel()
-		case 13, 10: // Enter (\r or \n)
 			if len(cs.inputBuffer) > 0 {
 				msg := string(cs.inputBuffer)
 				cs.inputBuffer = nil
@@ -202,22 +203,26 @@ func (cs *ClientState) handleInput(input io.Reader) {
 				// Clear input line
 				cs.moveToInput()
 
-				// Send to Server
-				if cs.stream != nil {
-					// Start goroutine to send to avoid blocking input loop
-					go func(ch, txt string) {
-						err := cs.stream.Send(&pbService.StreamRequest{
-							Request: &pbService.StreamRequest_SendMessage{
-								SendMessage: &pbService.SendMessageRequest{
-									Channel: ch,
-									Message: txt,
+				if len(msg) > 0 && msg[0] == '/' {
+					cs.handleCommand(msg)
+				} else {
+					// Send to Server
+					if cs.stream != nil {
+						// Start goroutine to send to avoid blocking input loop
+						go func(ch, txt string) {
+							err := cs.stream.Send(&pbService.StreamRequest{
+								Request: &pbService.StreamRequest_SendMessage{
+									SendMessage: &pbService.SendMessageRequest{
+										Channel: ch,
+										Message: txt,
+									},
 								},
-							},
-						})
-						if err != nil {
-							// Log error?
-						}
-					}(cs.currentChannel, msg)
+							})
+							if err != nil {
+								// Log error?
+							}
+						}(cs.currentChannel, msg)
+					}
 				}
 			}
 			cs.mu.Unlock()
@@ -380,4 +385,68 @@ func (cs *ClientState) redraw() {
 	}
 
 	cs.moveToInput()
+}
+
+func (cs *ClientState) handleCommand(cmd string) {
+	// Basic parsing
+	parts := strings.Fields(cmd)
+	if len(parts) == 0 {
+		return
+	}
+
+	switch parts[0] {
+	case "/disconnect":
+		if cs.termState != nil {
+			term.Restore(int(os.Stdin.Fd()), cs.termState)
+		}
+		cs.exitFunc(0)
+	case "/history":
+		// Request history for current channel
+		if cs.stream != nil {
+			go func() {
+				err := cs.stream.Send(&pbService.StreamRequest{
+					Request: &pbService.StreamRequest_Subscribe{
+						Subscribe: &pbService.SubscribeRequest{
+							GetHistory: true,
+						},
+					},
+				})
+				if err != nil {
+					// log
+				}
+			}()
+		}
+	case "/quit":
+		// Shutdown server
+		// Usage: /quit <password>
+		if len(parts) < 2 {
+			// Print error to local output?
+			// Need a way to print local system message
+			return
+		}
+		password := parts[1]
+		if cs.stream != nil {
+			go func() {
+				err := cs.stream.Send(&pbService.StreamRequest{
+					Request: &pbService.StreamRequest_Quit{
+						Quit: &pbService.QuitRequest{
+							ShutdownServer: true,
+							Password:       password,
+						},
+					},
+				})
+				if err != nil {
+					// log
+				}
+			}()
+			// Also disconnect client?
+			// Maybe wait for server to close stream?
+			// But server might die immediately.
+			time.Sleep(500 * time.Millisecond)
+			if cs.termState != nil {
+				term.Restore(int(os.Stdin.Fd()), cs.termState)
+			}
+			cs.exitFunc(0)
+		}
+	}
 }

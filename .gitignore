@@ -2,4 +2,6 @@ config.textproto
 certs/
 *.swp
 server/main
+i_server
 client/main
+i_client

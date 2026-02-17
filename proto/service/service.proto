@@ -22,8 +22,10 @@ message StreamRequest {
   oneof request {
       SubscribeRequest subscribe = 1;
       SendMessageRequest send_message = 2;
+      QuitRequest quit = 3;
   }
 }
+
 
 
 message SubscribeRequest {
@@ -35,6 +37,11 @@ message SubscribeRequest {
 message SendMessageRequest {
     string channel = 1;
     string message = 2;
+}
+
+message QuitRequest {
+    bool shutdown_server = 1;
+    string password = 2;
 }
 
 message SendMessageResponse {

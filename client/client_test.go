@@ -118,3 +118,21 @@ func TestHandleInput(t *testing.T) {
 		t.Error("Expected echoed character 'b'")
 	}
 }
+
+func TestHandleCommand(t *testing.T) {
+	out := new(bytes.Buffer)
+	exitCalled := false
+	cs := NewClientState()
+	cs.out = out
+	cs.exitFunc = func(code int) {
+		exitCalled = true
+	}
+	cs.width = 80
+	cs.height = 24
+
+	// Test /disconnect
+	cs.handleCommand("/disconnect")
+	if !exitCalled {
+		t.Error("Expected exit logic for /disconnect")
+	}
+}

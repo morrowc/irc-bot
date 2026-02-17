@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"os"
 	"sync"
 	"time"
 
@@ -95,6 +96,23 @@ func (s *IRCServiceServer) StreamMessages(stream pbService.IRCService_StreamMess
 		if msgReq, ok := req.Request.(*pbService.StreamRequest_SendMessage); ok {
 			if s.bot != nil {
 				s.bot.Send(msgReq.SendMessage.GetChannel(), msgReq.SendMessage.GetMessage())
+			}
+		} else if quitReq, ok := req.Request.(*pbService.StreamRequest_Quit); ok {
+			if quitReq.Quit.GetShutdownServer() {
+				// Verify password
+				if s.config.GetShutdownPassword() == "" || s.config.GetShutdownPassword() == quitReq.Quit.GetPassword() {
+					log.Println("Received shutdown request. Shutting down...")
+					// Graceful shutdown?
+					// We can use a channel to notify main
+					go func() {
+						time.Sleep(100 * time.Millisecond)
+						os.Exit(0)
+					}()
+					return nil
+				} else {
+					log.Printf("Invalid shutdown password")
+					// Send system message back?
+				}
 			}
 		}
 	}
