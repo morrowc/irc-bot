@@ -1,3 +1,5 @@
+config.textproto
+certs/
 *.swp
 server/main
 client/main
