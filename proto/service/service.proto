@@ -1,0 +1,61 @@
+syntax = "proto3";
+
+package service;
+
+option go_package = "github.com/morrowc/irc-bot/proto/service";
+
+import "google/protobuf/timestamp.proto";
+
+service IRCService {
+  // Streams messages from the server to the client.
+  // The client sends a subscription request (implicitly on connect, or explicit msg).
+  rpc StreamMessages (stream StreamRequest) returns (stream StreamEvent);
+
+  // Sends a message to a channel.
+  rpc SendMessage (SendMessageRequest) returns (SendMessageResponse);
+}
+
+message StreamRequest {
+  // If set, requests history for this channel since the given timestamp.
+  // If empty, requests live stream.
+  // Initial implementation might just be a "Subscribe" message.
+  oneof request {
+      SubscribeRequest subscribe = 1;
+      // Potential future control messages (e.g. valid-user-check)
+  }
+}
+
+message SubscribeRequest {
+    // If true, server sends history based on server-side logic (e.g. since last disconnect or full buffer).
+    // Or we can be specific:
+    bool get_history = 1; 
+}
+
+message SendMessageRequest {
+    string channel = 1;
+    string message = 2;
+}
+
+message SendMessageResponse {
+    bool success = 1;
+    string error = 2;
+}
+
+message StreamEvent {
+  oneof event {
+    IRCMessage message = 1;
+    SystemMessage system_message = 2;
+  }
+}
+
+message IRCMessage {
+  google.protobuf.Timestamp timestamp = 1;
+  string channel = 2;
+  string sender = 3;
+  string content = 4;
+}
+
+message SystemMessage {
+    google.protobuf.Timestamp timestamp = 1;
+    string content = 2; // E.g., "Disconnected from IRC", "Joined channel #foo"
+}
