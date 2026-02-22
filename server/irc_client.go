@@ -1,6 +1,8 @@
 package main
 
 import (
+	"sync"
+
 	"github.com/lrstanley/girc"
 	pbConfig "github.com/morrowc/irc-bot/proto/config"
 	pbService "github.com/morrowc/irc-bot/proto/service"
@@ -12,6 +14,9 @@ type IRCBot struct {
 	client    *girc.Client
 	history   func(channel string) *history.ChannelBuffer
 	broadcast func(msg *pbService.IRCMessage)
+	// State
+	mu       sync.RWMutex
+	channels map[string]string // channel -> key
 }
 
 func NewIRCBot(cfg *pbConfig.IRCServer, channels []*pbConfig.Channel, histGetter func(string) *history.ChannelBuffer, broadcaster func(*pbService.IRCMessage)) *IRCBot {
@@ -32,18 +37,55 @@ func NewIRCBot(cfg *pbConfig.IRCServer, channels []*pbConfig.Channel, histGetter
 		client:    client,
 		history:   histGetter,
 		broadcast: broadcaster,
+		channels:  make(map[string]string),
+	}
+
+	for _, ch := range channels {
+		bot.channels[ch.GetName()] = ch.GetKey()
 	}
 
 	client.Handlers.Add(girc.PRIVMSG, bot.handlePrivMsg)
 	client.Handlers.Add(girc.JOIN, bot.handleJoin)
 	client.Handlers.Add(girc.CONNECTED, func(c *girc.Client, e girc.Event) {
-		for _, ch := range channels {
-			key := ch.GetKey()
-			c.Cmd.JoinKey(ch.GetName(), key)
+		bot.mu.RLock()
+		defer bot.mu.RUnlock()
+		for ch, key := range bot.channels {
+			c.Cmd.JoinKey(ch, key)
 		}
 	})
 
 	return bot
+}
+
+func (b *IRCBot) UpdateChannels(newChannels []*pbConfig.Channel) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	newMap := make(map[string]string)
+	for _, ch := range newChannels {
+		newMap[ch.GetName()] = ch.GetKey()
+	}
+
+	// Calculate difference
+	// To Join
+	for ch, key := range newMap {
+		if _, exists := b.channels[ch]; !exists {
+			if b.client.IsConnected() {
+				b.client.Cmd.JoinKey(ch, key)
+			}
+		}
+	}
+
+	// To Part
+	for ch := range b.channels {
+		if _, exists := newMap[ch]; !exists {
+			if b.client.IsConnected() {
+				b.client.Cmd.Part(ch)
+			}
+		}
+	}
+
+	b.channels = newMap
 }
 
 func (b *IRCBot) Connect() error {

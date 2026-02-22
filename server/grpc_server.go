@@ -37,6 +37,13 @@ func (s *IRCServiceServer) SetBot(bot *IRCBot) {
 	s.bot = bot
 }
 
+func (s *IRCServiceServer) UpdateState(cfg *pbConfig.Service, hist map[string]*history.ChannelBuffer) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.config = cfg
+	s.history = hist
+}
+
 func (s *IRCServiceServer) StreamMessages(stream pbService.IRCService_StreamMessagesServer) error {
 	// Basic Auth Check (Ideally via Interceptor, but simplistic for now as per req)
 	// Client sends subscription request implementation.
@@ -63,7 +70,14 @@ func (s *IRCServiceServer) StreamMessages(stream pbService.IRCService_StreamMess
 
 	// Handle History
 	if subReq.GetGetHistory() {
-		for _, buf := range s.history {
+		s.mu.RLock()
+		histCopy := make(map[string]*history.ChannelBuffer)
+		for k, v := range s.history {
+			histCopy[k] = v
+		}
+		s.mu.RUnlock()
+
+		for _, buf := range histCopy {
 			msgs := buf.GetSince(time.Time{}) // Get all for now, or use a specific time if provided
 			for _, msg := range msgs {
 				if err := stream.Send(&pbService.StreamEvent{
@@ -100,7 +114,11 @@ func (s *IRCServiceServer) StreamMessages(stream pbService.IRCService_StreamMess
 		} else if quitReq, ok := req.Request.(*pbService.StreamRequest_Quit); ok {
 			if quitReq.Quit.GetShutdownServer() {
 				// Verify password
-				if s.config.GetShutdownPassword() == "" || s.config.GetShutdownPassword() == quitReq.Quit.GetPassword() {
+				s.mu.RLock()
+				cfgPass := s.config.GetShutdownPassword()
+				s.mu.RUnlock()
+
+				if cfgPass == "" || cfgPass == quitReq.Quit.GetPassword() {
 					log.Println("Received shutdown request. Shutting down...")
 					// Graceful shutdown?
 					// We can use a channel to notify main
