@@ -4,10 +4,11 @@ import (
 	"sync"
 
 	"github.com/lrstanley/girc"
-	pbConfig "github.com/morrowc/irc-bot/proto/config"
-	pbService "github.com/morrowc/irc-bot/proto/service"
 	"github.com/morrowc/irc-bot/server/history"
 	"google.golang.org/protobuf/types/known/timestamppb"
+
+	pbConfig "github.com/morrowc/irc-bot/proto/config"
+	pbService "github.com/morrowc/irc-bot/proto/service"
 )
 
 type IRCBot struct {

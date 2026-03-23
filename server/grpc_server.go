@@ -7,11 +7,12 @@ import (
 	"sync"
 	"time"
 
-	pbConfig "github.com/morrowc/irc-bot/proto/config"
-	pbService "github.com/morrowc/irc-bot/proto/service"
 	"github.com/morrowc/irc-bot/server/history"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	pbConfig "github.com/morrowc/irc-bot/proto/config"
+	pbService "github.com/morrowc/irc-bot/proto/service"
 )
 
 type IRCServiceServer struct {

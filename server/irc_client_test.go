@@ -5,8 +5,9 @@ import (
 	"time"
 
 	"github.com/lrstanley/girc"
-	pbService "github.com/morrowc/irc-bot/proto/service"
 	"github.com/morrowc/irc-bot/server/history"
+
+	pbService "github.com/morrowc/irc-bot/proto/service"
 )
 
 func TestHandlePrivMsg(t *testing.T) {

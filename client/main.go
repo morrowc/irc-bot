@@ -16,11 +16,12 @@ import (
 
 	"golang.org/x/term"
 
-	pbConfig "github.com/morrowc/irc-bot/proto/config"
-	pbService "github.com/morrowc/irc-bot/proto/service"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/protobuf/encoding/prototext"
+
+	pbConfig "github.com/morrowc/irc-bot/proto/config"
+	pbService "github.com/morrowc/irc-bot/proto/service"
 )
 
 // ClientState manages the client logic and state

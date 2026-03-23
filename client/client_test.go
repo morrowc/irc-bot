@@ -5,8 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	pbService "github.com/morrowc/irc-bot/proto/service"
 	"google.golang.org/protobuf/types/known/timestamppb"
+
+	pbService "github.com/morrowc/irc-bot/proto/service"
 )
 
 func TestHandleMessage(t *testing.T) {

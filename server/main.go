@@ -12,12 +12,13 @@ import (
 	"sync"
 	"syscall"
 
-	pbConfig "github.com/morrowc/irc-bot/proto/config"
-	pbService "github.com/morrowc/irc-bot/proto/service"
 	"github.com/morrowc/irc-bot/server/history"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/protobuf/encoding/prototext"
+
+	pbConfig "github.com/morrowc/irc-bot/proto/config"
+	pbService "github.com/morrowc/irc-bot/proto/service"
 )
 
 var (
