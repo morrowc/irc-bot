@@ -1,0 +1,48 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+
+go_library(
+    name = "server_lib",
+    srcs = [
+        "grpc_server.go",
+        "irc_client.go",
+        "main.go",
+    ],
+    importpath = "github.com/morrowc/irc-bot/server",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//proto/config",
+        "//proto/service",
+        "//server/history",
+        "@com_github_lrstanley_girc//:girc",
+        "@org_golang_google_grpc//:grpc",
+        "@org_golang_google_grpc//codes",
+        "@org_golang_google_grpc//credentials",
+        "@org_golang_google_grpc//status",
+        "@org_golang_google_protobuf//encoding/prototext",
+        "@org_golang_google_protobuf//types/known/timestamppb",
+    ],
+)
+
+go_binary(
+    name = "server",
+    embed = [":server_lib"],
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "server_test",
+    srcs = [
+        "config_test.go",
+        "grpc_server_test.go",
+        "irc_client_test.go",
+    ],
+    embed = [":server_lib"],
+    deps = [
+        "//proto/config",
+        "//proto/service",
+        "//server/history",
+        "@com_github_lrstanley_girc//:girc",
+        "@org_golang_google_grpc//:grpc",
+        "@org_golang_google_protobuf//types/known/timestamppb",
+    ],
+)

@@ -1,0 +1,5 @@
+load("@bazel_gazelle//:def.bzl", "gazelle")
+
+# gazelle:prefix github.com/morrowc/irc-bot
+# gazelle:proto disable_global
+gazelle(name = "gazelle")

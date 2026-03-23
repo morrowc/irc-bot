@@ -298,7 +298,7 @@ func (cs *ClientState) nextChannel() {
 		if ch == cs.currentChannel {
 			next := (i + 1) % len(cs.channels)
 			cs.currentChannel = cs.channels[next]
-			cs.redraw()
+			cs.redrawUnlocked()
 			return
 		}
 	}
@@ -315,7 +315,7 @@ func (cs *ClientState) prevChannel() {
 		if ch == cs.currentChannel {
 			prev := (i - 1 + len(cs.channels)) % len(cs.channels)
 			cs.currentChannel = cs.channels[prev]
-			cs.redraw()
+			cs.redrawUnlocked()
 			return
 		}
 	}
@@ -360,7 +360,10 @@ func (cs *ClientState) moveToInput() {
 func (cs *ClientState) redraw() {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
+	cs.redrawUnlocked()
+}
 
+func (cs *ClientState) redrawUnlocked() {
 	// Clear screen
 	fmt.Fprint(cs.out, "\033[H\033[2J")
 

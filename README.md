@@ -26,6 +26,10 @@ The system consists of two main components:
 
 ## Setup & Usage
 
+### Prerequisites
+
+* **Bazel**: The project uses Bazel as its build system. Please install the latest version of Bazel (e.g., via Bazelisk) to build and run the code.
+
 ### 1. Generate Certificates
 
 Run the helper script to generate a Certificate Authority (CA), Server, and Client certificates:
@@ -73,13 +77,13 @@ tls: {
 ### 3. Run Server
 
 ```bash
-go run server/*.go -config config.textproto
+bazel run //server:server -- --config $(pwd)/config.textproto
 ```
 
 ### 4. Run Client
 
 ```bash
-go run client/*.go -config config.textproto
+bazel run //client:client
 ```
 
 ## Controls (Client)
@@ -90,8 +94,8 @@ go run client/*.go -config config.textproto
 
 ## Testing
 
-Run unit tests for all components:
+Run unit tests for all components using Bazel:
 
 ```bash
-go test -v ./...
+bazel test //...
 ```
