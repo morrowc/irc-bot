@@ -1,7 +1,6 @@
 package main
 
 import (
-	"io/ioutil"
 	"os"
 	"testing"
 )
@@ -29,7 +28,7 @@ tls: {
     client_cn: "client"
 }
 `
-	tmpfile, err := ioutil.TempFile("", "config.textproto")
+	tmpfile, err := os.CreateTemp("", "config.textproto")
 	if err != nil {
 		t.Fatal(err)
 	}

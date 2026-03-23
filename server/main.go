@@ -5,7 +5,6 @@ import (
 	"crypto/x509"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net"
 	"os"
@@ -27,7 +26,7 @@ var (
 
 func loadConfig(path string) (*pbConfig.Config, error) {
 	// Load Configuration
-	configData, err := ioutil.ReadFile(path)
+	configData, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config file: %v", err)
 	}
@@ -102,7 +101,7 @@ func main() {
 
 	if tlsConfig != nil {
 		// Load CA
-		caCert, err := ioutil.ReadFile(tlsConfig.GetCaFile())
+		caCert, err := os.ReadFile(tlsConfig.GetCaFile())
 		if err != nil {
 			log.Fatalf("failed to read CA cert: %v", err)
 		}
