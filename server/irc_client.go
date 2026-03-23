@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/tls"
 	"sync"
 
 	"github.com/lrstanley/girc"
@@ -30,6 +31,10 @@ func NewIRCBot(cfg *pbConfig.IRCServer, channels []*pbConfig.Channel, histGetter
 		Name:       cfg.GetUser(),
 		ServerPass: cfg.GetPassword(),
 		SSL:        cfg.GetUseTls(),
+	}
+
+	if !cfg.GetUseTls() {
+		config.TLSConfig = &tls.Config{InsecureSkipVerify: true}
 	}
 
 	client := girc.New(config)
