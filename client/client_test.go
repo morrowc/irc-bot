@@ -63,7 +63,7 @@ func TestChannelSwitching(t *testing.T) {
 	if cs.currentChannel != "#chan2" {
 		t.Errorf("Expected #chan2, got %s", cs.currentChannel)
 	}
-	if !strings.Contains(out.String(), "Switched to #chan2") {
+	if !strings.Contains(out.String(), "[ Channel: #chan2 ]") {
 		t.Errorf("Expected switch message, got %s", out.String())
 	}
 
@@ -111,7 +111,7 @@ func TestHandleInput(t *testing.T) {
 		t.Errorf("Expected switch to #chan2, got %s", cs.currentChannel)
 	}
 
-	if !strings.Contains(out.String(), "Switched to #chan2") {
+	if !strings.Contains(out.String(), "[ Channel: #chan2 ]") {
 		t.Error("Expected redraw output")
 	}
 	if !strings.Contains(out.String(), "b") {
