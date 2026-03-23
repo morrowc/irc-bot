@@ -1,3 +1,5 @@
+# Bazel link artifacts
+bazel-*
 config.textproto
 certs/
 *.swp
